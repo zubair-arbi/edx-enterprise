@@ -20,7 +20,6 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ImproperlyConfigured, PermissionDenied
 from django.core.urlresolvers import reverse
 from django.db import transaction
-from django.http import Http404
 from django.shortcuts import redirect, render
 from django.utils.decorators import method_decorator
 from django.utils.text import slugify
@@ -70,7 +69,7 @@ LMS_DASHBOARD_URL = urljoin(settings.LMS_ROOT_URL, '/dashboard')
 LMS_PROGRAMS_DASHBOARD_URL = urljoin(settings.LMS_ROOT_URL, '/dashboard/programs/{uuid}')
 LMS_START_PREMIUM_COURSE_FLOW_URL = urljoin(settings.LMS_ROOT_URL, '/verify_student/start-flow/{course_id}/')
 LMS_COURSEWARE_URL = urljoin(settings.LMS_ROOT_URL, '/courses/{course_id}/courseware')
-
+ENTERPRISE_GENERAL_ERROR_PAGE = 'enterprise/enterprise_error_page_with_messages.html'
 
 def verify_edx_resources():
     """
@@ -340,8 +339,21 @@ class GrantDataSharingPermissions(View):
             if not self.preview_mode:
                 try:
                     catalog_api_client = CourseCatalogApiServiceClient(enterprise_customer.site)
-                except ImproperlyConfigured:
-                    raise Http404
+                except ImproperlyConfigured as error:
+                    error_code = 'ENTGDS000'
+                    LOGGER.error(
+                        'Error: {error}. Return error code {error_code} to user'.format(
+                            error=error,
+                            error_code=error_code,
+                        )
+                    )
+                    messages.add_customizable_warning_message(request, error_code)
+                    return render(
+                        request,
+                        ENTERPRISE_GENERAL_ERROR_PAGE,
+                        context=context_data,
+                        status=500,
+                    )
 
                 course_run_details = catalog_api_client.get_course_run(course_id)
                 course_start_date = ''
@@ -376,11 +388,37 @@ class GrantDataSharingPermissions(View):
         program_uuid = request.GET.get('program_uuid', '')
         self.preview_mode = bool(request.GET.get('preview_mode', False))
         if not (enterprise_customer_uuid and success_url and failure_url):
-            raise Http404
+            error_code = 'ENTGDS001'
+            LOGGER.error(
+                'Error: one or more of the following values was falsy: '
+                'enterprise_customer_uuid: {enterprise_customer_uuid}, '
+                'success_url: {success_url}, '
+                'failure_url: {failure_url}. '
+                'The following error code was reported to the user: {error_code}'.format(
+                    enterprise_customer_uuid=enterprise_customer_uuid,
+                    success_url=success_url,
+                    failure_url=failure_url,
+                    error_code=error_code,
+                    )
+                )
+            messages.add_generic_error_message_with_code(request, error_code)
+            return render(
+                request,
+                ENTERPRISE_GENERAL_ERROR_PAGE,
+                context=context_data,
+                status=404,
+            )
 
         if not self.preview_mode:
             if not self.course_or_program_exist(course_id, program_uuid):
-                raise Http404
+                LOGGER.error('zzzzz')
+                messages.add_generic_error_message_with_code(request, 'ENTGDS002')
+                return render(
+                    request,
+                    ENTERPRISE_GENERAL_ERROR_PAGE,
+                    context=context_data,
+                    status=404,
+                )
 
             consent_record = get_data_sharing_consent(
                 request.user.username,
@@ -389,7 +427,14 @@ class GrantDataSharingPermissions(View):
                 course_id=course_id
             )
             if consent_record is None or not consent_record.consent_required():
-                raise Http404
+                LOGGER.error('zzzzz')
+                messages.add_generic_error_message_with_code(request, 'ENTGDS003')
+                return render(
+                    request,
+                    ENTERPRISE_GENERAL_ERROR_PAGE,
+                    context=context_data,
+                    status=400,
+        )
 
             enterprise_customer = consent_record.enterprise_customer
         else:
@@ -454,12 +499,26 @@ class GrantDataSharingPermissions(View):
         success_url = request.POST.get('redirect_url')
         failure_url = request.POST.get('failure_url')
         if not (enterprise_uuid and success_url and failure_url):
-            raise Http404
+            LOGGER.error('zzzzz')
+            messages.add_generic_error_message_with_code(request, 'ENTGDS004')
+            return render(
+                request,
+                ENTERPRISE_GENERAL_ERROR_PAGE,
+                context=context_data,
+                status=404,
+            )
 
         course_id = request.POST.get('course_id', '')
         program_uuid = request.POST.get('program_uuid', '')
         if not self.course_or_program_exist(course_id, program_uuid):
-            raise Http404
+            LOGGER.error('zzzzz')
+            messages.add_generic_error_message_with_code(request, 'ENTGDS005')
+            return render(
+                request,
+                ENTERPRISE_GENERAL_ERROR_PAGE,
+                context=context_data,
+                status=404,
+            )
 
         consent_record = get_data_sharing_consent(
             request.user.username,
@@ -468,7 +527,14 @@ class GrantDataSharingPermissions(View):
             course_id=course_id
         )
         if consent_record is None:
-            raise Http404
+            LOGGER.error('zzzzz')
+            messages.add_generic_error_message_with_code(request, 'ENTGDS006')
+            return render(
+                request,
+                ENTERPRISE_GENERAL_ERROR_PAGE,
+                context=context_data,
+                status=404,
+            )
 
         defer_creation = request.POST.get('defer_creation')
         consent_provided = bool(request.POST.get('data_sharing_consent', False))
@@ -523,7 +589,14 @@ class HandleConsentEnrollment(View):
         enrollment_api_client = EnrollmentApiClient()
         course_modes = enrollment_api_client.get_course_modes(course_id)
         if not course_modes:
-            raise Http404
+            LOGGER.error('zzzzz')
+            messages.add_generic_error_message_with_code(request, 'ENTHCE000')
+            return render(
+                request,
+                ENTERPRISE_GENERAL_ERROR_PAGE,
+                context=context_data,
+                status=404,
+            )
 
         # Verify that the request user belongs to the enterprise against the
         # provided `enterprise_uuid`.
@@ -749,7 +822,7 @@ class CourseEnrollmentView(NonAtomicView):
         enterprise_catalog_uuid = request.GET.get(
             'catalog'
         ) if request.method == 'GET' else None
-        html_template_for_rendering = 'enterprise/enterprise_course_enrollment_error_page.html'
+        html_template_for_rendering = ENTERPRISE_GENERAL_ERROR_PAGE
         if course and course_run:
             course_enrollable = True
             course_start_date = ''
@@ -1080,12 +1153,26 @@ class ProgramEnrollmentView(NonAtomicView):
         try:
             catalog_api_client = CourseCatalogApiServiceClient(enterprise_customer.site)
         except ImproperlyConfigured:
-            raise Http404
+            LOGGER.error('zzzzz')
+            messages.add_generic_error_message_with_code(request, 'ENTPEV000')
+            return render(
+                request,
+                ENTERPRISE_GENERAL_ERROR_PAGE,
+                context=context_data,
+                status=500,
+            )
 
         course_run_id = course['course_runs'][0]['key']
         course_details, course_run_details = catalog_api_client.get_course_and_course_run(course_run_id)
         if not course_details or not course_run_details:
-            raise Http404
+            LOGGER.error('zzzzz')
+            messages.add_generic_error_message_with_code(request, 'ENTPEV001')
+            return render(
+                request,
+                ENTERPRISE_GENERAL_ERROR_PAGE,
+                context=context_data,
+                status=404,
+            )
 
         weeks_to_complete = course_run_details['weeks_to_complete']
         course_run_image = course_run_details['image'] or {}
@@ -1125,15 +1212,36 @@ class ProgramEnrollmentView(NonAtomicView):
         try:
             course_catalog_api_client = CourseCatalogApiServiceClient(enterprise_customer.site)
         except ImproperlyConfigured:
-            raise Http404
+            LOGGER.error('zzzzz')
+            messages.add_generic_error_message_with_code(request, 'ENTPEV002')
+            return render(
+                request,
+                ENTERPRISE_GENERAL_ERROR_PAGE,
+                context=context_data,
+                status=500,
+            )
 
         program_details = course_catalog_api_client.get_program_by_uuid(program_uuid)
         if program_details is None:
-            raise Http404
+            LOGGER.error('zzzzz')
+            messages.add_generic_error_message_with_code(request, 'ENTPEV003')
+            return render(
+                request,
+                ENTERPRISE_GENERAL_ERROR_PAGE,
+                context=context_data,
+                status=404,
+            )
 
         program_type = course_catalog_api_client.get_program_type_by_slug(slugify(program_details['type']))
         if program_type is None:
-            raise Http404
+            LOGGER.error('zzzzz')
+            messages.add_generic_error_message_with_code(request, 'ENTPEV004')
+            return render(
+                request,
+                ENTERPRISE_GENERAL_ERROR_PAGE,
+                context=context_data,
+                status=404,
+            )
 
         # Extend our program details with context we'll need for display or for deciding redirects.
         program_details = ProgramDataExtender(program_details, request.user).extend()
@@ -1405,14 +1513,28 @@ class RouterView(NonAtomicView):
         try:
             course = CourseCatalogApiServiceClient(enterprise_customer.site).get_course_details(course_key)
         except ImproperlyConfigured:
-            raise Http404
+            LOGGER.error('zzzzz')
+            messages.add_generic_error_message_with_code(request, 'ENTRV000')
+            return render(
+                request,
+                ENTERPRISE_GENERAL_ERROR_PAGE,
+                context=context_data,
+                status=500,
+            )
 
         course_run = get_current_course_run(course)
         if course_run:
             course_run_id = course_run['key']
             return course_run_id
         else:
-            raise Http404
+            LOGGER.error('zzzzz')
+            messages.add_generic_error_message_with_code(request, 'ENTRV001')
+            return render(
+                request,
+                ENTERPRISE_GENERAL_ERROR_PAGE,
+                context=context_data,
+                status=404,
+            )
 
     def eligible_for_direct_audit_enrollment(self, request, enterprise_customer, resource_id, course_key=None):
         """
