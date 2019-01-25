@@ -16,6 +16,7 @@ from django.core.exceptions import ImproperlyConfigured
 from django.core.urlresolvers import reverse
 from django.test import Client, TestCase
 
+from enterprise.constants import HANDLE_CONSENT_ENROLLMENT
 from enterprise.models import EnterpriseCourseEnrollment
 from enterprise.views import LMS_COURSEWARE_URL, LMS_DASHBOARD_URL, LMS_START_PREMIUM_COURSE_FLOW_URL
 from test_utils import fake_render
@@ -447,7 +448,7 @@ class TestGrantDataSharingPermissions(MessagesMixin, TestCase):
         post_data = {
             'enterprise_customer_uuid': enterprise_customer.uuid,
             'course_id': course_id,
-            'redirect_url': '/successful_enrollment',
+            'redirect_url': HANDLE_CONSENT_ENROLLMENT,
             'failure_url': '/failure_url',
         }
         if defer_creation:
@@ -579,7 +580,7 @@ class TestGrantDataSharingPermissions(MessagesMixin, TestCase):
         post_data = {
             'enterprise_customer_uuid': enterprise_customer.uuid,
             'course_id': course_id,
-            'redirect_url': '/successful_enrollment?',
+            'redirect_url': HANDLE_CONSENT_ENROLLMENT,
             'failure_url': '/failure_url',
             'data_sharing_consent': True
         }
@@ -614,9 +615,8 @@ class TestGrantDataSharingPermissions(MessagesMixin, TestCase):
         post_data = {
             'enterprise_customer_uuid': enterprise_customer.uuid,
             'course_id': course_id,
-            'redirect_url': '/successful_enrollment?{}'.format(
-                urlencode({'course_mode': 'audit'})
-            ),
+            'redirect_url': HANDLE_CONSENT_ENROLLMENT,
+            'course_mode': 'audit',
             'failure_url': '/failure_url',
             'data_sharing_consent': True
         }
@@ -665,11 +665,10 @@ class TestGrantDataSharingPermissions(MessagesMixin, TestCase):
         post_data = {
             'enterprise_customer_uuid': enterprise_customer.uuid,
             'course_id': course_id,
-            'redirect_url': '/successful_enrollment?{}'.format(
-                urlencode({'course_mode': 'some-invalid-course-mode'})
-            ),
+            'redirect_url': HANDLE_CONSENT_ENROLLMENT,
+            'course_mode': 'some-invalid-course-mode',
             'failure_url': '/failure_url',
-            'data_sharing_consent': True
+            'data_sharing_consent': True,
         }
 
         resp = self.client.post(self.url, post_data)
@@ -722,12 +721,9 @@ class TestGrantDataSharingPermissions(MessagesMixin, TestCase):
         post_data = {
             'enterprise_customer_uuid': enterprise_customer.uuid,
             'course_id': course_id,
-            'redirect_url': '/successful_enrollment?{}'.format(
-                urlencode({
-                    'course_mode': 'audit',
-                    'catalog': enterprise_catalog.uuid,
-                })
-            ),
+            'redirect_url': HANDLE_CONSENT_ENROLLMENT,
+            'catalog': enterprise_catalog.uuid,
+            'course_mode': 'audit',
             'failure_url': '/failure_url',
             'data_sharing_consent': True
         }
@@ -786,12 +782,9 @@ class TestGrantDataSharingPermissions(MessagesMixin, TestCase):
         post_data = {
             'enterprise_customer_uuid': enterprise_customer.uuid,
             'course_id': course_id,
-            'redirect_url': '/successful_enrollment?{}'.format(
-                urlencode({
-                    'course_mode': 'professional',
-                    'catalog': enterprise_catalog.uuid,
-                })
-            ),
+            'redirect_url': HANDLE_CONSENT_ENROLLMENT,
+            'course_mode': 'professional',
+            'catalog': enterprise_catalog.uuid,
             'failure_url': '/failure_url',
             'data_sharing_consent': True
         }
